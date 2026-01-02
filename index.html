@@ -1,0 +1,348 @@
+
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Pro Tracker</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<style>
+/* ===== UI ===== */
+body{
+  background-image: url(focus.jpg);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-attachment: fixed;
+  background-size: cover;
+  color:white;
+  font-family:Segoe UI, Arial;
+  margin:0;
+}
+header{
+  text-align:center;
+  padding:20px;
+  background: transparent;
+  background-attachment: fixed;
+  backdrop-filter: blur(20px)
+}
+.container{
+  max-width:1000px;
+  margin:20px auto;
+}
+.card{
+  background: transparent;
+  position: relative;
+  backdrop-filter: blur(20px);
+  padding:15px;
+  border-radius:12px;
+  margin-bottom:20px;
+  border:1px solid #1f2937;
+}
+.row{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+}
+.row input,.row select{
+  flex:1;
+  padding:10px;
+  border-radius:8px;
+  border:none;
+}
+button{
+  padding:10px 15px;
+  border:none;
+  border-radius:8px;
+  cursor:pointer;
+  color:white;
+}
+.add{background:#adadad}
+.ok{background:#7b7b7b}
+.del{background:#363636}
+button:active{transform:scale(.95)}
+
+.task{
+  background:transparent;
+  backdrop-filter: blur(20px);
+  border:1px solid #1f2937;
+  padding:10px;
+  border-radius:10px;
+  margin-top:10px;
+}
+.task.drag{opacity:.4}
+
+.top{
+  display:flex;
+  justify-content:space-between;
+}
+.meta{
+  font-size:12px;
+  color:#9ca3af;
+}
+
+.status{padding:3px 8px;border-radius:8px;font-size:12px}
+.active{background:#4da96a}
+.done{background:#065f46}
+.overdue{background:#7c2d12}
+.completed{text-decoration:line-through;color:#9ca3af}
+
+/* ===== STATS ===== */
+.stats{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:10px;
+  text-align:center;
+}
+.box{
+  background: transparent;
+  backdrop-filter: blur(20px);
+  padding:10px;
+  border-radius:10px;
+  border:1px solid #ffffff;
+}
+
+canvas{ 
+    width:100%;
+    background:transparent; 
+    backdrop-filter: blur(20px); 
+
+    border-radius:10px
+    }
+
+    
+
+/* 📱 MOBILE OPTIMIZATION */
+
+@media(max-width:700px){
+
+    header h1{
+      font-size:20px;
+    }
+  
+    .row{
+      gap:6px;
+    }
+  
+    .row input,
+    .row select,
+    .add{
+      flex:1 1 100%;
+    }
+  
+    .stats{
+      grid-template-columns:repeat(2,1fr);
+    }
+  
+    .task{
+      padding:10px;
+    }
+  
+    .task button{
+      width:100%;
+    }
+  
+    .top{
+      flex-direction:column;
+      align-items:flex-start;
+    }
+  
+    canvas{
+      height:140px;
+    }
+  }
+  
+  @media(max-width:360px){
+    body{font-size:14px}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Goal-tracking</h1>
+  <p>A digital diary to set, track, and complete goals with progress bars, motivational quotes, animations, and mobile-friendly design.</p>
+</header>
+
+<div class="container">
+
+  <!-- ADD -->
+  <div class="card">
+    <h2>Set goal</h2>
+    <div class="row">
+      <input id="text" placeholder="Describe your goal...">
+      <select id="type">
+        <option value="day">Day</option>
+        <option value="week">Week</option>
+        <option value="month">Month</option>
+        <option value="year">Year</option>
+      </select>
+      <input id="date" type="date">
+      <button class="add" onclick="add()">Add</button>
+    </div>
+  </div>
+
+  <!-- STATS -->
+  <div class="card">
+    <h2>Statistics</h2>
+
+    <div class="stats">
+      <div class="box">Total<br><b id="total">0</b></div>
+      <div class="box">Done<br><b id="done">0</b></div>
+      <div class="box">Waste<br><b id="late">0</b></div>
+      <div class="box">Progress<br><b id="rate">0%</b></div>
+    </div>
+
+    <canvas id="chart" height="150"></canvas>
+  </div>
+
+  <!-- LIST -->
+  <div class="card">
+    <h2>My purpose</h2>
+    <div id="list"></div>
+  </div>
+
+</div>
+
+
+
+
+<script>
+/* ===== STORAGE ===== */
+function load(){return JSON.parse(localStorage.getItem("protracker")||"[]")}
+function save(d){localStorage.setItem("protracker",JSON.stringify(d))}
+
+/* ===== STATUS ===== */
+function getStatus(t){
+  const today=new Date().setHours(0,0,0,0)
+  const dl=new Date(t.deadline).setHours(0,0,0,0)
+  if(t.done) return "done"
+  if(dl<today) return "overdue"
+  return "active"
+}
+
+/* ===== RENDER ===== */
+function render(){
+  const list=document.getElementById("list")
+  const data=load()
+
+  data.sort((a,b)=>new Date(a.deadline)-new Date(b.deadline))
+
+  list.innerHTML=""
+
+  data.forEach((t,i)=>{
+    const div=document.createElement("div")
+    div.className="task"+(t.done?" completed":"")
+    div.draggable=true
+
+    div.innerHTML=`
+      <div class="top">
+        <b>${t.text}</b>
+        <span class="status ${getStatus(t)}">
+          ${
+            getStatus(t)==="done"?"Completed":
+            getStatus(t)==="overdue"?"Overdue":
+            "In process"
+          }
+        </span>
+      </div>
+
+      <div class="meta">
+        Тип: ${t.type} • Created: ${t.created} • Deadline: ${t.deadline}
+      </div>
+
+      <button class="ok" onclick="toggle(${i})">✔</button>
+      <button class="del" onclick="removeTask(${i})">✖</button>
+    `
+
+    drag(div,i)
+    list.appendChild(div)
+  })
+
+  stats()
+  chart()
+}
+
+function add(){
+  let text=document.getElementById("text").value.trim()
+  let type=document.getElementById("type").value
+  let date=document.getElementById("date").value
+  if(!text||!date)return alert("Where are your goals man?")
+
+  let d=load()
+  d.push({
+    text,
+    type,
+    created:new Date().toISOString().slice(0,10),
+    deadline:date,
+    done:false
+  })
+  save(d);render()
+}
+
+function toggle(i){
+  let d=load()
+  d[i].done=!d[i].done
+  save(d);render()
+}
+
+function removeTask(i){
+  let d=load()
+  d.splice(i,1)
+  save(d);render()
+}
+
+/* ===== DRAG ===== */
+function drag(el,index){
+  el.addEventListener("dragstart",()=>el.classList.add("drag"))
+  el.addEventListener("dragend",()=>el.classList.remove("drag"))
+  el.addEventListener("dragover",e=>e.preventDefault())
+  el.addEventListener("drop",()=>{
+    let d=load()
+    let dragging=document.querySelector(".drag")
+    let newIndex=[...document.querySelectorAll(".task")].indexOf(dragging)
+    let item=d.splice(index,1)[0]
+    d.splice(newIndex,0,item)
+    save(d);render()
+  })
+}
+
+/* ===== STATS ===== */
+function stats(){
+  let d=load()
+  document.getElementById("total").innerText=d.length
+  document.getElementById("done").innerText=d.filter(x=>x.done).length
+  document.getElementById("late").innerText=d.filter(x=>getStatus(x)==="overdue").length
+  document.getElementById("rate").innerText=
+    d.length?Math.round(d.filter(x=>x.done).length/d.length*100)+"%":"0%"
+}
+
+/* ===== CHART ===== */
+function chart(){
+  let c=document.getElementById("chart")
+  let ctx=c.getContext("2d")
+  ctx.clearRect(0,0,c.width,c.height)
+
+  let d=load()
+  let days={}
+
+  d.forEach(t=>{
+    if(t.done){
+      days[t.created]=(days[t.created]||0)+1
+    }
+  })
+
+  let arr=Object.entries(days)
+  let max=Math.max(...arr.map(x=>x[1]),1)
+
+  arr.forEach((x,i)=>{
+    let h=x[1]/max*130
+    ctx.fillRect(i*30+20,140-h,20,h)
+  })
+}
+
+render()
+</script>
+
+</body>
+</html>
